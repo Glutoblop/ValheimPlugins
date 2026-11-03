@@ -1,0 +1,12 @@
+{
+  "_comment": "Mods offered by the installer. Each repo must have a plugin.json on the given branch.",
+  "bepinex": {
+    "thunderstore_namespace": "denikson",
+    "thunderstore_name": "BepInExPack_Valheim"
+  },
+  "plugins": [
+    { "repo": "Glutoblop/HealthCheckup", "branch": "main" },
+    { "repo": "Glutoblop/HotkeySliding", "branch": "main" },
+    { "repo": "Glutoblop/RecipeSearch", "branch": "main" }
+  ]
+}
