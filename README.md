@@ -24,6 +24,8 @@ A point-and-click installer for Glutoblop's Valheim mods. No terminal, no manual
 
 Type in the **Search** box (Ctrl+F) to filter the list. It fuzzy-matches the mod name and its GitHub URL, so `rcpsrch`, `serch` or `glutoblop health` all work.
 
+The installer keeps itself up to date: each launch first checks the latest [ValheimPlugins release](https://github.com/Glutoblop/ValheimPlugins/releases/latest) and, if it's newer, unpacks it over the installer folder before opening. Your `sources.json` is kept (new built-in mods are added to it) and your settings are untouched. No internet? It just opens the installer you have.
+
 Open the installer again any time: mods with a newer version say **Update available**, and **Select updates** ticks them all for you. A note appears if a mod was last tested on a different Valheim version than yours.
 
 Uninstalling keeps your mod settings (`BepInEx/config/*.cfg`).
@@ -98,8 +100,10 @@ Settings (your Valheim folder) are saved to `%APPDATA%\ValheimModInstaller\setti
 
 ## Publishing releases (maintainer)
 
-```
-python release/make_release.py
-```
+Double-click **`release\Release.bat`** (or `release\Release.bat --build-only` to just build). It:
 
-Builds `ValheimModInstaller.zip` plus a `<Plugin>.zip` / `<Plugin>.dll` for every sibling plugin folder, and publishes any version that doesn't have a GitHub release yet (needs the GitHub CLI: `winget install GitHub.cli`, then `gh auth login`). Bump `APP_VERSION` in `valheim_mod_installer.pyw`, or a plugin's `plugin.json` + `Plugin.cs`, to publish a new version. `--build-only` just builds the zips into `release/out/`.
+1. rebuilds any sibling plugin whose source is newer than its `dist/` DLL (`dotnet build -c Release`),
+2. checks the installer and every plugin repo is committed and pushed (dist DLLs and `plugin.json` are served from `main`),
+3. runs `python release/make_release.py`.
+
+`make_release.py` on its own builds `ValheimModInstaller.zip` plus a `<Plugin>.zip` / `<Plugin>.dll` for every sibling plugin folder, and publishes any version that doesn't have a GitHub release yet (needs the GitHub CLI: `winget install GitHub.cli`, then `gh auth login`). Bump `APP_VERSION` in `valheim_mod_installer.pyw`, or a plugin's `plugin.json` + `Plugin.cs`, to publish a new version. `--build-only` just builds the zips into `release/out/`.

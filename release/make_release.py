@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent           # the ValheimPlugins rep
 OUT = ROOT / "release" / "out"
 INSTALLER_REPO = "Glutoblop/ValheimPlugins"
 INSTALLER_FILES = ["Start-Installer.bat", "Start-Installer.ps1", "start-installer.sh",
-                   "valheim_mod_installer.pyw", "sources.json", "README.md"]
+                   "launcher.pyw", "valheim_mod_installer.pyw", "sources.json", "README.md"]
 
 
 def find_gh():

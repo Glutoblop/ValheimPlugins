@@ -37,7 +37,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "Valheim Mod Installer"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 USER_AGENT = "ValheimModInstaller/" + APP_VERSION
 VALHEIM_APPID = "892970"
 HERE = Path(__file__).resolve().parent

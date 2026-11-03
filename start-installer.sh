@@ -3,7 +3,7 @@
 # Finds a Python 3 with Tkinter, offers to install it if missing, then starts the GUI detached.
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="$HERE/valheim_mod_installer.pyw"
+SCRIPT="$HERE/launcher.pyw"   # checks for updates, then starts valheim_mod_installer.pyw
 TITLE="Valheim Mod Installer"
 
 msg() {

@@ -4,7 +4,7 @@
 
 $ErrorActionPreference = 'Stop'
 $here   = Split-Path -Parent $MyInvocation.MyCommand.Path
-$script = Join-Path $here 'valheim_mod_installer.pyw'
+$script = Join-Path $here 'launcher.pyw'   # checks for updates, then starts valheim_mod_installer.pyw
 $title  = 'Valheim Mod Installer'
 $pythonVersion = '3.12.10'
 
@@ -68,7 +68,7 @@ function Install-Python {
 
 try {
     if (-not (Test-Path $script)) {
-        Show-Message "Can't find valheim_mod_installer.pyw next to this launcher.`nKeep all the installer files together in one folder." 'Error' | Out-Null
+        Show-Message "Can't find launcher.pyw next to this launcher.`nKeep all the installer files together in one folder." 'Error' | Out-Null
         exit 1
     }
     $pyw = Find-PythonW
