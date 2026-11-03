@@ -1,18 +1,14 @@
 """
-Build release packages for the Valheim Mod Installer and the plugins, and publish them as
-GitHub releases with the GitHub CLI (gh).
+Build the release package for the Valheim Mod Installer and publish it as a GitHub release with
+the GitHub CLI (gh). Plugins are released by their own release scripts (../<Plugin>/release/).
 
-    python release/make_release.py              # build + publish everything that isn't released yet
-    python release/make_release.py --build-only # just build the zips into release/out/
+    python release/make_release.py              # build + publish if this version isn't released yet
+    python release/make_release.py --build-only # just build the zip into release/out/
 
-Packages (asset names are stable, so .../releases/latest/download/<asset> always works):
+Asset (name is stable, so .../releases/latest/download/ValheimModInstaller.zip always works):
     ValheimPlugins  v<APP_VERSION>  ValheimModInstaller.zip
-    <Plugin>        v<version>      <Id>.zip  (BepInEx/plugins/<Id>/<Id>.dll + README.md)
-                                    <Id>.dll
 
-Plugin folders are found next to this repo (../HealthCheckUp etc.) via their plugin.json; pass
---plugins-dir to point elsewhere. A release whose tag already exists is skipped, so bump the
-version (APP_VERSION in valheim_mod_installer.pyw, or plugin.json + Plugin.cs) to publish again.
+A release whose tag already exists is skipped; release/release.ps1 bumps APP_VERSION for you.
 """
 
 import argparse
@@ -77,42 +73,6 @@ def build_installer():
             "assets": [zpath], "notes": notes}
 
 
-def build_plugin(pdir):
-    m = json.loads((pdir / "plugin.json").read_text(encoding="utf-8"))
-    pid, version = m["id"], m["version"]
-    dll = pdir / "dist" / (pid + ".dll")
-    if not dll.exists():
-        raise SystemExit("{}: {} missing - run dotnet build -c Release first".format(pid, dll))
-    src = (pdir / "src" / "Plugin.cs")
-    if src.exists():
-        m2 = re.search(r'Version\s*=\s*"([^"]+)"', src.read_text(encoding="utf-8"))
-        if m2 and m2.group(1) != version:
-            raise SystemExit("{}: plugin.json says {} but Plugin.cs says {} - make them match".format(pid, version, m2.group(1)))
-    out_dll = OUT / (pid + ".dll")
-    shutil.copy2(dll, out_dll)
-    zpath = OUT / (pid + ".zip")
-    with zipfile.ZipFile(zpath, "w") as z:
-        add_file(z, dll, "BepInEx/plugins/{}/{}.dll".format(pid, pid))
-        if (pdir / "README.md").exists():
-            add_file(z, pdir / "README.md", "BepInEx/plugins/{}/README.md".format(pid))
-    vh = m.get("valheim", {})
-    changes = m.get("changelog", {}).get(version, "")
-    notes = (
-        "## {name} {v}\n\n{desc}\n\n"
-        "{changes}"
-        "**Tested on Valheim {vh}** (network version {nv}, Steam build {sb}) on {lt}. "
-        "Requires BepInExPack_Valheim {bx}+. Client-side only.\n\n"
-        "### Install\n"
-        "- **Easiest:** use the [Valheim Mod Installer](https://github.com/{irepo}/releases/latest/download/ValheimModInstaller.zip).\n"
-        "- **Manual:** unzip `{id}.zip` into your Valheim folder (or drop `{id}.dll` into `BepInEx/plugins/{id}/`)."
-    ).format(name=m["name"], v=version, desc=m.get("description", ""),
-             changes="### Changes\n- {}\n\n".format(changes) if changes else "",
-             vh=vh.get("version", "?"), nv=vh.get("network_version", "?"), sb=vh.get("steam_build", "?"),
-             lt=vh.get("last_tested", "?"), bx=m.get("requires", {}).get("BepInExPack_Valheim", "5.4"),
-             irepo=INSTALLER_REPO, id=pid)
-    return {"repo": m["repo"], "tag": "v" + version, "title": "{} v{}".format(m["name"], version),
-            "assets": [zpath, out_dll], "notes": notes}
-
 
 def gh_run(gh, args, check=True):
     return subprocess.run([gh] + args, capture_output=True, text=True, check=check)
@@ -136,18 +96,12 @@ def publish(gh, rel):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--build-only", action="store_true")
-    ap.add_argument("--plugins-dir", default=str(ROOT.parent))
-    ap.add_argument("--installer-only", action="store_true",
-                    help="only package/publish the installer (plugins are released by their own release scripts)")
     args = ap.parse_args()
 
     shutil.rmtree(OUT, ignore_errors=True)
     OUT.mkdir(parents=True)
 
     releases = [build_installer()]
-    for pj in sorted(Path(args.plugins_dir).glob("*/plugin.json")) if not args.installer_only else []:
-        if pj.parent.resolve() != ROOT:
-            releases.append(build_plugin(pj.parent))
     for r in releases:
         print("built {:<28} {:<8} {}".format(r["repo"], r["tag"], ", ".join(a.name for a in r["assets"])))
     if args.build_only:

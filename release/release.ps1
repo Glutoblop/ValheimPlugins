@@ -1,30 +1,24 @@
-# Full release process for the Valheim Mod Installer and the sibling plugins.
+# Release process for the Valheim Mod Installer only. Each plugin has its own release script
+# (..\<Plugin>\release\Release.bat) and is released separately.
 #
 #   release\Release.bat                 (double-click)
-#   powershell -File release\release.ps1 [-BuildOnly] [-SkipBuild] [-NoPlugins]
-#                                        [-Bump patch|minor|major] [-Changes "text"]
+#   powershell -File release\release.ps1 [-BuildOnly] [-Bump patch|minor|major] [-Changes "text"]
 #
-# 1. Checks the installer repo is committed and pushed to origin/main.
-# 2. Releases every sibling plugin (..\<Plugin>\release\release.ps1): each one bumps its patch
-#    version, rebuilds, commits + pushes "Release vX.Y.Z" and publishes its GitHub release.
-# 3. Bumps the installer's APP_VERSION (patch by default) in valheim_mod_installer.pyw,
-#    commits + pushes "Release vX.Y.Z".
-# 4. Runs release\make_release.py --installer-only: builds ValheimModInstaller.zip and publishes it.
+# 1. Checks the repo is committed and pushed to origin/main.
+# 2. Bumps APP_VERSION (patch by default) in valheim_mod_installer.pyw.
+# 3. Commits "Release vX.Y.Z" and pushes it to origin/main.
+# 4. Runs release\make_release.py: builds ValheimModInstaller.zip into release\out and publishes it.
 #
-# -BuildOnly skips bumping, committing and publishing: it just builds every package into release\out.
-# -NoPlugins releases only the installer. -Bump/-Changes apply to the installer (plugins always bump patch).
+# -BuildOnly skips steps 1-3 and publishing: it just builds the zip with the current version.
 
 param(
     [switch]$BuildOnly,
-    [switch]$SkipBuild,
-    [switch]$NoPlugins,
     [ValidateSet('patch', 'minor', 'major')][string]$Bump = 'patch',
-    [string]$Changes = ''
+    [string]$Changes = ''      # extra text for the release commit message
 )
 
 $ErrorActionPreference = 'Stop'
 $installerDir = Split-Path -Parent $PSScriptRoot
-$pluginsDir   = Split-Path -Parent $installerDir
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 function Step($text) { Write-Host "`n== $text" -ForegroundColor Cyan }
@@ -56,34 +50,11 @@ $python = Find-Exe 'python' @("$env:LOCALAPPDATA\Programs\Python\Python312\pytho
 if (-not $python) { $python = Find-Exe 'py' @() }
 if (-not $python) { Fail 'Python not found.' }
 
-$plugins = @()
-if (-not $NoPlugins) {
-    $plugins = @(Get-ChildItem $pluginsDir -Directory |
-        Where-Object { (Test-Path (Join-Path $_.FullName 'plugin.json')) -and $_.FullName -ne $installerDir })
-    foreach ($p in $plugins) {
-        if (-not (Test-Path (Join-Path $p.FullName 'release\release.ps1'))) {
-            Fail "$($p.Name) has no release\release.ps1 (copy it from another plugin)."
-        }
-    }
-}
-
 if (-not $BuildOnly) {
-    Step 'Checking installer repo is committed and pushed'
+    Step 'Checking repo is committed and pushed'
     Assert-GitClean $installerDir
-}
 
-# Each plugin's own script does its checks, bump, build, commit/push and publish.
-foreach ($p in $plugins) {
-    Step "Plugin: $($p.Name)"
-    $pargs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $p.FullName 'release\release.ps1'))
-    if ($BuildOnly) { $pargs += '-BuildOnly' }
-    if ($SkipBuild) { $pargs += '-SkipBuild' }
-    & powershell.exe @pargs
-    if ($LASTEXITCODE -ne 0) { Fail "$($p.Name) release failed (see above)." }
-}
-
-if (-not $BuildOnly) {
-    Step "Bumping installer version ($Bump)"
+    Step "Bumping version ($Bump)"
     $pyw = Join-Path $installerDir 'valheim_mod_installer.pyw'
     $src = [System.IO.File]::ReadAllText($pyw)
     $m = [regex]::Match($src, '(?m)^APP_VERSION = "(\d+)\.(\d+)\.(\d+)"')
@@ -100,7 +71,7 @@ if (-not $BuildOnly) {
     [System.IO.File]::WriteAllText($pyw, $src, $utf8)
     Write-Host "  $old -> $new"
 
-    Step "Committing and pushing installer v$new"
+    Step "Committing and pushing v$new"
     $msg = "Release v$new"
     if ($Changes) { $msg += "`n`n$Changes" }
     git -C $installerDir add -A
@@ -111,10 +82,9 @@ if (-not $BuildOnly) {
     Write-Host "  pushed"
 }
 
-Step ($(if ($BuildOnly) { 'Building packages' } else { 'Building and publishing installer' }))
-$makeArgs = @((Join-Path $PSScriptRoot 'make_release.py'), '--plugins-dir', $pluginsDir)
-if ($BuildOnly) { $makeArgs += '--build-only' } else { $makeArgs += '--installer-only' }
-if ($NoPlugins) { $makeArgs += '--installer-only' }
+Step ($(if ($BuildOnly) { 'Building package' } else { 'Building and publishing package' }))
+$makeArgs = @((Join-Path $PSScriptRoot 'make_release.py'))
+if ($BuildOnly) { $makeArgs += '--build-only' }
 & $python @makeArgs
 if ($LASTEXITCODE -ne 0) { Fail 'make_release.py failed (see above).' }
 
