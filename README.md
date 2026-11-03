@@ -2,9 +2,13 @@
 
 A point-and-click installer for Glutoblop's Valheim mods. No terminal, no manual file copying.
 
+## [⬇ Download ValheimModInstaller.zip](https://github.com/Glutoblop/ValheimPlugins/releases/latest/download/ValheimModInstaller.zip)
+
+([all releases](https://github.com/Glutoblop/ValheimPlugins/releases))
+
 ## For players
 
-1. Download this repo (green **Code** button > **Download ZIP** on [github.com/Glutoblop/ValheimPlugins](https://github.com/Glutoblop/ValheimPlugins)) and unzip it anywhere.
+1. Download [**ValheimModInstaller.zip**](https://github.com/Glutoblop/ValheimPlugins/releases/latest/download/ValheimModInstaller.zip) and unzip it anywhere.
 2. Double-click the launcher for your system:
 
    | System | Launcher |
@@ -91,3 +95,11 @@ GitHub allows 60 unauthenticated API calls an hour, which is plenty for normal u
 - To **add a new mod**: give its repo a `plugin.json` + `dist/` DLL (or just publish GitHub releases) and add it to `sources.json`.
 
 Settings (your Valheim folder) are saved to `%APPDATA%\ValheimModInstaller\settings.json` (`~/.config/ValheimModInstaller` on Linux, `~/Library/Application Support/ValheimModInstaller` on macOS). If the GUI ever crashes, the error is written to `crash.log` in the same folder.
+
+## Publishing releases (maintainer)
+
+```
+python release/make_release.py
+```
+
+Builds `ValheimModInstaller.zip` plus a `<Plugin>.zip` / `<Plugin>.dll` for every sibling plugin folder, and publishes any version that doesn't have a GitHub release yet (needs the GitHub CLI: `winget install GitHub.cli`, then `gh auth login`). Bump `APP_VERSION` in `valheim_mod_installer.pyw`, or a plugin's `plugin.json` + `Plugin.cs`, to publish a new version. `--build-only` just builds the zips into `release/out/`.

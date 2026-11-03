@@ -18,3 +18,6 @@ settings.json
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Release build output
+release/out/
