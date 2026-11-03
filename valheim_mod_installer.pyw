@@ -37,7 +37,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "Valheim Mod Installer"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 USER_AGENT = "ValheimModInstaller/" + APP_VERSION
 VALHEIM_APPID = "892970"
 HERE = Path(__file__).resolve().parent
@@ -50,6 +50,7 @@ BEPINEX = {"thunderstore_namespace": "denikson", "thunderstore_name": "BepInExPa
 # The editable list of mod sources: [{"name": "...", "url": "https://github.com/owner/repo"}, ...]
 SOURCES_FILE = HERE / "sources.json"
 DEFAULT_SOURCES = [
+    {"name": "Achievement Enabler", "url": "https://github.com/Glutoblop/AchievementEnabler"},
     {"name": "Health Check Up", "url": "https://github.com/Glutoblop/HealthCheckup"},
     {"name": "Hotkey Sliding", "url": "https://github.com/Glutoblop/HotkeySliding"},
     {"name": "Recipe Search", "url": "https://github.com/Glutoblop/RecipeSearch"},
