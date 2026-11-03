@@ -137,13 +137,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--build-only", action="store_true")
     ap.add_argument("--plugins-dir", default=str(ROOT.parent))
+    ap.add_argument("--installer-only", action="store_true",
+                    help="only package/publish the installer (plugins are released by their own release scripts)")
     args = ap.parse_args()
 
     shutil.rmtree(OUT, ignore_errors=True)
     OUT.mkdir(parents=True)
 
     releases = [build_installer()]
-    for pj in sorted(Path(args.plugins_dir).glob("*/plugin.json")):
+    for pj in sorted(Path(args.plugins_dir).glob("*/plugin.json")) if not args.installer_only else []:
         if pj.parent.resolve() != ROOT:
             releases.append(build_plugin(pj.parent))
     for r in releases:
