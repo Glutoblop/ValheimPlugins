@@ -24,7 +24,7 @@ A point-and-click installer for Glutoblop's Valheim mods. No terminal, no manual
 
 Type in the **Search** box (Ctrl+F) to filter the list. It fuzzy-matches the mod name and its GitHub URL, so `rcpsrch`, `serch` or `glutoblop health` all work.
 
-The installer keeps itself up to date: each launch first checks the latest [ValheimPlugins release](https://github.com/Glutoblop/ValheimPlugins/releases/latest) and, if it's newer, unpacks it over the installer folder before opening. Your `sources.json` is kept (new built-in mods are added to it) and your settings are untouched. No internet? It just opens the installer you have.
+The installer keeps itself up to date: each launch first checks the latest [ValheimPlugins release](https://github.com/Glutoblop/ValheimPlugins/releases/latest) and, if it's newer, unpacks it over the installer folder before opening. Your `sources.json` and settings are never overwritten. No internet? It just opens the installer you have.
 
 Open the installer again any time: mods with a newer version say **Update available**, and **Select updates** ticks them all for you. A note appears if a mod was last tested on a different Valheim version than yours.
 
@@ -47,14 +47,21 @@ Valheim mods need nothing else: BepInEx runs on the game's own bundled .NET runt
 
 ## Adding other plugins (File menu)
 
-The mod list comes from **`sources.json`** next to the installer: just a name you choose and a GitHub URL.
+The mod list is two lists merged together:
+
+- **Default mods**: [`default-sources.json`](default-sources.json) in this repo, downloaded each time the installer refreshes (cached in the settings folder for offline use). Adding a line there and pushing makes a new mod show up for everyone, with no installer release needed.
+- **Your own mods**: **`sources.json`** next to the installer, which the installer and its updates never overwrite.
 
 ```json
-[
-  { "name": "Recipe Search", "url": "https://github.com/Glutoblop/RecipeSearch" },
-  { "name": "Jotunn", "url": "https://github.com/Valheim-Modding/Jotunn" }
-]
+{
+  "sources": [
+    { "name": "Jotunn", "url": "https://github.com/Valheim-Modding/Jotunn" }
+  ],
+  "hidden": ["Glutoblop/HotkeySliding"]
+}
 ```
+
+`sources` adds your own plugins (a name you choose and a GitHub URL). Listing a default repo there overrides its entry (e.g. a different name or `branch`). `hidden` removes default mods from your list. Custom rows are marked "custom". An old plain-list `sources.json` is converted automatically.
 
 - **File > Add plugin source...** (Ctrl+N): enter a name + URL (a GitHub URL on your clipboard is pre-filled). The **+ Add source** button does the same.
 - **File > Edit plugin sources...** (Ctrl+E): edit the JSON in-app. It is checked before saving (bad JSON shows the line/column; bad or duplicate URLs are rejected).
@@ -94,7 +101,7 @@ GitHub allows 60 unauthenticated API calls an hour, which is plenty for normal u
 - **Installing** downloads each file in `files` into `<Valheim>/<install_dir>/`.
 - **Game version** is read from `BepInEx/LogOutput.log` (after the game has been launched once with BepInEx) and the Steam build id from `steamapps/appmanifest_892970.acf`; both are compared against the mod's `valheim` block.
 - To **ship an update**: bump the version in `src/Plugin.cs` and `plugin.json`, build (the csproj copies the DLL to `dist/`), commit and push. Everyone sees it next time they open the installer.
-- To **add a new mod**: give its repo a `plugin.json` + `dist/` DLL (or just publish GitHub releases) and add it to `sources.json`.
+- To **add a new mod**: give its repo a `plugin.json` + `dist/` DLL (or just publish GitHub releases) and add it to `default-sources.json` (or your own `sources.json`).
 
 Settings (your Valheim folder) are saved to `%APPDATA%\ValheimModInstaller\settings.json` (`~/.config/ValheimModInstaller` on Linux, `~/Library/Application Support/ValheimModInstaller` on macOS). If the GUI ever crashes, the error is written to `crash.log` in the same folder.
 

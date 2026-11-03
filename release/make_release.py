@@ -68,7 +68,7 @@ def build_installer():
         "tick the mods you want and click **Install / Update**. BepInEx is installed automatically.\n\n"
         "Included mods: {mods}. Add any other GitHub-hosted plugin from **File > Add plugin source**."
     ).format(v=version, repo=INSTALLER_REPO,
-             mods=", ".join(s["name"] for s in json.loads((ROOT / "sources.json").read_text(encoding="utf-8"))))
+             mods=", ".join(s["name"] for s in json.loads((ROOT / "default-sources.json").read_text(encoding="utf-8"))))
     return {"repo": INSTALLER_REPO, "tag": "v" + version, "title": "Valheim Mod Installer v" + version,
             "assets": [zpath], "notes": notes}
 

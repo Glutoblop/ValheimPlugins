@@ -6,7 +6,7 @@ A small window that runs before the real installer GUI:
   1. reads APP_VERSION from valheim_mod_installer.pyw (the version currently on disk),
   2. asks GitHub for the latest ValheimPlugins release,
   3. if that release is newer, downloads ValheimModInstaller.zip and unpacks it over this folder
-     (your sources.json is kept - any new built-in sources are merged into it; settings in
+     (your sources.json is never overwritten - default mods are fetched online; settings in
      %APPDATA% / ~/.config are never touched),
   4. starts valheim_mod_installer.pyw and exits.
 
@@ -35,7 +35,7 @@ ASSET = "ValheimModInstaller.zip"
 ZIP_PREFIX = "ValheimModInstaller/"      # every file in the release zip lives under this folder
 HERE = Path(__file__).resolve().parent
 MAIN_SCRIPT = HERE / "valheim_mod_installer.pyw"
-SOURCES_FILE = "sources.json"            # user-editable: merged, never blindly overwritten
+SOURCES_FILE = "sources.json"            # user-editable: never overwritten once it exists
 CHECK_TIMEOUT = 8
 
 
@@ -71,29 +71,6 @@ def latest_release():
     raise RuntimeError("Release {} has no {}".format(rel.get("tag_name"), ASSET))
 
 
-def _repo_key(url):
-    u = (url or "").strip().lower().rstrip("/")
-    u = re.sub(r"\.git$", "", u)
-    return u.split("github.com/")[-1].split("github.com:")[-1]
-
-
-def merge_sources(old_text, new_text):
-    """Keep the user's list (order, names, custom entries); append new built-in sources they don't have.
-    Returns the text to write, or None to leave the user's file untouched."""
-    try:
-        old = json.loads(old_text)
-        new = json.loads(new_text)
-        if not isinstance(old, list) or not isinstance(new, list):
-            return None
-    except ValueError:
-        return None  # user's file is hand-edited/broken: don't clobber it
-    have = {_repo_key(s.get("url")) for s in old if isinstance(s, dict)}
-    added = [s for s in new if isinstance(s, dict) and _repo_key(s.get("url")) not in have]
-    if not added:
-        return None
-    return json.dumps(old + added, indent=2) + "\n"
-
-
 def apply_update(zip_path, status):
     """Unpack the release zip over HERE. Files are staged then swapped in one at a time."""
     with zipfile.ZipFile(zip_path) as z, tempfile.TemporaryDirectory(prefix="vmi-update-") as stage:
@@ -123,10 +100,7 @@ def apply_update(zip_path, status):
             target = HERE / rel
             staged = stage / rel
             if rel == SOURCES_FILE and target.exists():
-                merged = merge_sources(target.read_text(encoding="utf-8"), staged.read_text(encoding="utf-8"))
-                if merged is None:
-                    continue
-                staged.write_text(merged, encoding="utf-8")
+                continue  # the user's own list; default mods come from default-sources.json online
             target.parent.mkdir(parents=True, exist_ok=True)
             tmp = target.with_name(target.name + ".new")
             shutil.copy2(staged, tmp)

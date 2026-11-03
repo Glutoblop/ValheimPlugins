@@ -5,7 +5,7 @@ A small, dependency-free (Python standard library only) GUI that:
 
   1. finds (or lets you pick) your Valheim install folder,
   2. installs / updates BepInExPack_Valheim (the mod loader every Valheim mod needs),
-  3. shows each mod listed in sources.json with its installed version, latest version and the
+  3. shows each mod (the online default list plus your own sources.json) with its installed version, latest version and the
      Valheim version it was last tested on (fuzzy-searchable by name / git URL),
   4. installs / updates / removes the mods you tick.
 
@@ -48,8 +48,13 @@ IS_MAC = sys.platform == "darwin"
 
 BEPINEX = {"thunderstore_namespace": "denikson", "thunderstore_name": "BepInExPack_Valheim"}
 
-# The editable list of mod sources: [{"name": "...", "url": "https://github.com/owner/repo"}, ...]
+# Mod sources come from two lists, merged on load:
+#  - the default list, downloaded from DEFAULT_SOURCES_URL (cached in app data; DEFAULT_SOURCES is the
+#    last-resort fallback), so new mods can be shipped without releasing a new installer;
+#  - the user's own sources.json: {"sources": [{"name": "...", "url": "..."}, ...], "hidden": ["owner/repo"]}.
+#    A user entry for a default repo overrides it; "hidden" removes defaults from the list.
 SOURCES_FILE = HERE / "sources.json"
+DEFAULT_SOURCES_URL = "https://raw.githubusercontent.com/{}/main/default-sources.json".format(INSTALLER_REPO)
 DEFAULT_SOURCES = [
     {"name": "Achievement Enabler", "url": "https://github.com/Glutoblop/AchievementEnabler"},
     {"name": "Health Check Up", "url": "https://github.com/Glutoblop/HealthCheckup"},
@@ -169,10 +174,15 @@ def parse_repo_url(url):
     return "{}/{}".format(m.group(1), m.group(2)), branch
 
 
+def repo_key(url):
+    """'https://github.com/Owner/Repo' -> 'owner/repo' (raises ValueError)."""
+    return parse_repo_url(url)[0].lower()
+
+
 def validate_sources(data):
     """Raises ValueError with a readable message if the sources list is malformed."""
     if not isinstance(data, list):
-        raise ValueError("The file must be a JSON list: [ {\"name\": ..., \"url\": ...}, ... ]")
+        raise ValueError("Sources must be a JSON list: [ {\"name\": ..., \"url\": ...}, ... ]")
     seen = set()
     for i, s in enumerate(data, 1):
         if not isinstance(s, dict) or not s.get("url"):
@@ -184,18 +194,104 @@ def validate_sources(data):
     return data
 
 
-def load_sources():
+def validate_user_sources(data):
+    """Normalises the user's sources.json to {"sources": [...], "hidden": [...]} or raises ValueError.
+    A plain list (the pre-1.4 format) is accepted as "sources"."""
+    if isinstance(data, list):
+        data = {"sources": data}
+    if not isinstance(data, dict):
+        raise ValueError("sources.json must be {\"sources\": [...], \"hidden\": [...]}")
+    unknown = set(data) - {"sources", "hidden"}
+    if unknown:
+        raise ValueError("Unknown key(s) in sources.json: {}".format(", ".join(sorted(unknown))))
+    sources = validate_sources(data.get("sources", []))
+    hidden = data.get("hidden", [])
+    if not isinstance(hidden, list) or not all(isinstance(h, str) for h in hidden):
+        raise ValueError("\"hidden\" must be a list of repo URLs or owner/repo strings.")
+    for h in hidden:
+        parse_repo_url(h)
+    return {"sources": sources, "hidden": hidden}
+
+
+def default_sources_cache():
+    return app_data_dir() / "default-sources.json"
+
+
+def load_default_sources(fetch=False):
+    """Returns (sources, warning). With fetch=True the online list is downloaded and cached;
+    otherwise (or if that fails) the cached copy is used, then the built-in DEFAULT_SOURCES."""
+    warn = None
+    if fetch:
+        try:
+            data = validate_sources(json.loads(http_get(DEFAULT_SOURCES_URL, timeout=10).decode("utf-8")))
+            try:
+                p = default_sources_cache()
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            except OSError:
+                pass
+            return data, None
+        except Exception as e:
+            warn = "Couldn't download the default mod list ({}); using the last saved copy.".format(e)
     try:
-        data = json.loads(SOURCES_FILE.read_text(encoding="utf-8"))
-        return validate_sources(data), None
+        return validate_sources(json.loads(default_sources_cache().read_text(encoding="utf-8"))), warn
+    except Exception:
+        return list(DEFAULT_SOURCES), warn
+
+
+def load_user_sources():
+    """Returns ({"sources": [...], "hidden": [...]}, warning). Migrates a pre-1.4 plain-list file by
+    dropping the entries that are built-in defaults (they now come from the default list)."""
+    empty = {"sources": [], "hidden": []}
+    try:
+        raw = json.loads(SOURCES_FILE.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        save_sources(DEFAULT_SOURCES)
-        return list(DEFAULT_SOURCES), None
+        save_user_sources(empty)
+        return empty, None
     except Exception as e:
-        return list(DEFAULT_SOURCES), "sources.json is invalid ({}); using the built-in list.".format(e)
+        return empty, "sources.json is invalid ({}); showing only the default mods.".format(e)
+    try:
+        data = validate_user_sources(raw)
+    except ValueError as e:
+        return empty, "sources.json is invalid ({}); showing only the default mods.".format(e)
+    if isinstance(raw, list):
+        builtin = {repo_key(s["url"]) for s in DEFAULT_SOURCES}
+        data["sources"] = [s for s in data["sources"] if repo_key(s["url"]) not in builtin]
+        try:
+            save_user_sources(data)
+        except OSError:
+            pass
+    return data, None
 
 
-def save_sources(data):
+def merge_sources(defaults, user):
+    """Defaults first (in their order), then the user's own entries. A user entry for a default repo
+    replaces it in place; hidden repos are dropped. Each entry gets "origin": "default" or "custom"."""
+    hidden = {repo_key(h) for h in user["hidden"]}
+    overrides = {repo_key(s["url"]): s for s in user["sources"]}
+    merged, seen = [], set()
+    for s in defaults:
+        k = repo_key(s["url"])
+        if k in hidden or k in seen:
+            continue
+        seen.add(k)
+        merged.append(dict(overrides.get(k, s), origin="default"))
+    for s in user["sources"]:
+        k = repo_key(s["url"])
+        if k not in seen and k not in hidden:
+            seen.add(k)
+            merged.append(dict(s, origin="custom"))
+    return merged
+
+
+def load_sources(fetch=False):
+    """Returns (merged sources, [warnings]). fetch=True downloads the default list (call off the UI thread)."""
+    defaults, w1 = load_default_sources(fetch)
+    user, w2 = load_user_sources()
+    return merge_sources(defaults, user), [w for w in (w1, w2) if w]
+
+
+def save_user_sources(data):
     SOURCES_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
@@ -684,8 +780,13 @@ class SourcesEditor(tk.Toplevel):
         top = ttk.Frame(self, padding=8)
         top.pack(fill="both", expand=True)
         ttk.Label(top, justify="left", foreground=COL_MUTED, text=(
-            "One entry per plugin: a name you choose and its GitHub URL. Optional \"branch\".\n"
-            "Repos with a plugin.json use it; any other repo installs its latest GitHub release (.dll / .zip).")
+            "\"sources\": your own plugins - a name you choose and its GitHub URL. Optional \"branch\".\n"
+            "Repos with a plugin.json use it; any other repo installs its latest GitHub release (.dll / .zip).\n"
+            "The default mods are updated online. List one in \"sources\" to override it, or in \"hidden\" to hide it.")
+        ).pack(anchor="w", pady=(0, 2))
+        defaults, _ = load_default_sources()
+        ttk.Label(top, justify="left", foreground=COL_MUTED, wraplength=app._px(700), text="Defaults: " + ", ".join(
+            "{} ({})".format(s.get("name") or repo_key(s["url"]), repo_key(s["url"])) for s in defaults)
         ).pack(anchor="w", pady=(0, 6))
 
         frame = ttk.Frame(top)
@@ -698,10 +799,11 @@ class SourcesEditor(tk.Toplevel):
         xs.pack(side="bottom", fill="x")
         self.text.pack(side="left", fill="both", expand=True)
 
+        load_user_sources()  # creates / migrates the file
         try:
             content = SOURCES_FILE.read_text(encoding="utf-8")
         except Exception:
-            content = json.dumps(DEFAULT_SOURCES, indent=2) + "\n"
+            content = json.dumps({"sources": [], "hidden": []}, indent=2) + "\n"
         self.text.insert("1.0", content)
         self.text.edit_reset()
 
@@ -719,7 +821,7 @@ class SourcesEditor(tk.Toplevel):
         self.text.focus_set()
 
     def _parse(self):
-        raw = self.text.get("1.0", "end").strip() or "[]"
+        raw = self.text.get("1.0", "end").strip() or "{}"
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as e:
@@ -728,16 +830,16 @@ class SourcesEditor(tk.Toplevel):
             self.text.see("insert")
             return None
         try:
-            validate_sources(data)
+            return validate_user_sources(data)
         except ValueError as e:
             self.status.configure(text=str(e), fg=COL_BAD)
             return None
-        return data
 
     def check(self):
         data = self._parse()
         if data is not None:
-            self.status.configure(text="Looks good: {} source(s).".format(len(data)), fg=COL_OK)
+            self.status.configure(text="Looks good: {} source(s), {} hidden.".format(
+                len(data["sources"]), len(data["hidden"])), fg=COL_OK)
 
     def format(self):
         data = self._parse()
@@ -751,7 +853,7 @@ class SourcesEditor(tk.Toplevel):
         if data is None:
             return
         try:
-            save_sources(data)
+            save_user_sources(data)
         except Exception as e:
             self.status.configure(text="Couldn't save: {}".format(e), fg=COL_BAD)
             return
@@ -761,7 +863,7 @@ class SourcesEditor(tk.Toplevel):
     def external(self):
         data = self._parse()
         if data is not None:
-            save_sources(data)
+            save_user_sources(data)
         open_path(SOURCES_FILE)
         self.destroy()
         self.app.log("Opened {} - use File > Reload plugin sources after saving it.".format(SOURCES_FILE))
@@ -810,13 +912,18 @@ class AddSourceDialog(tk.Toplevel):
         except ValueError as ex:
             self.status.configure(text=str(ex))
             return
+        key = repo.lower()
+        user, _ = load_user_sources()
+        hidden = [h for h in user["hidden"] if repo_key(h) != key]
         sources, _ = load_sources()
-        if any(parse_repo_url(s["url"])[0].lower() == repo.lower() for s in sources):
+        if len(hidden) == len(user["hidden"]) and any(repo_key(s["url"]) == key for s in sources):
             self.status.configure(text="{} is already in the list.".format(repo))
             return
-        sources.append({"name": name or repo.split("/")[1], "url": "https://github.com/" + repo})
+        user["hidden"] = hidden  # adding a hidden default un-hides it
+        if not any(repo_key(s["url"]) == key for s in user["sources"]):
+            user["sources"].append({"name": name or repo.split("/")[1], "url": "https://github.com/" + repo})
         try:
-            save_sources(sources)
+            save_user_sources(user)
         except Exception as ex:
             self.status.configure(text="Couldn't save sources.json: {}".format(ex))
             return
@@ -1125,11 +1232,10 @@ class App(tk.Tk):
     def refresh(self):
         ok = self._update_game_status()
         gd = self.game_dir.get().strip() if ok else None
-        sources, warn = load_sources()
-        if warn:
-            self.log(warn)
-
         def work():
+            sources, warns = load_sources(fetch=True)
+            for w in warns:
+                self.log(w)
             self.log("Checking {} plugin source(s) for latest versions...".format(len(sources)))
             try:
                 bx = fetch_bepinex_latest()
@@ -1139,7 +1245,7 @@ class App(tk.Tk):
             results = [None] * len(sources)
 
             def one(i, s):
-                results[i] = fetch_source_manifest(s)
+                results[i] = dict(fetch_source_manifest(s), origin=s.get("origin"))
 
             threads = [threading.Thread(target=one, args=(i, s), daemon=True) for i, s in enumerate(sources)]
             for t in threads:
@@ -1201,7 +1307,8 @@ class App(tk.Tk):
             desc = tk.Label(left, text=m.get("description", ""), fg=COL_MUTED, justify="left", anchor="w", wraplength=300)
             if m.get("description"):
                 desc.pack(anchor="w", fill="x", padx=(22, 0))
-            link = tk.Label(left, text="github.com/{}".format(m["repo"]) + ("  (GitHub release)" if m.get("source") == "release" else ""),
+            link = tk.Label(left, text="github.com/{}".format(m["repo"]) + ("  (GitHub release)" if m.get("source") == "release" else "")
+                            + ("  - custom" if m.get("origin") == "custom" else ""),
                             fg=COL_INFO, cursor="hand2", anchor="w")
             link.pack(anchor="w", padx=(22, 0))
             link.bind("<Button-1>", lambda e, u=m.get("url") or ("https://github.com/" + m["repo"]): webbrowser.open(u))
