@@ -40,6 +40,7 @@ APP_NAME = "Valheim Mod Installer"
 APP_VERSION = "1.3.1"
 USER_AGENT = "ValheimModInstaller/" + APP_VERSION
 VALHEIM_APPID = "892970"
+INSTALLER_REPO = "Glutoblop/ValheimPlugins"   # where the installer itself is released
 HERE = Path(__file__).resolve().parent
 
 IS_WINDOWS = sys.platform.startswith("win")
@@ -872,6 +873,10 @@ class App(tk.Tk):
         fm.add_command(label="Exit", command=self.destroy)
         bar.add_cascade(label="File", menu=fm)
         hm = tk.Menu(bar, tearoff=0)
+        hm.add_command(label="Check for new version...", command=self.check_for_update)
+        hm.add_command(label="Open releases page",
+                       command=lambda: webbrowser.open("https://github.com/{}/releases".format(INSTALLER_REPO)))
+        hm.add_separator()
         hm.add_command(label="About", command=lambda: messagebox.showinfo(
             APP_NAME, "{} {}\n\nSources: {}".format(APP_NAME, APP_VERSION, SOURCES_FILE)))
         bar.add_cascade(label="Help", menu=hm)
@@ -895,7 +900,11 @@ class App(tk.Tk):
         outer = ttk.Frame(self, padding=12)
         outer.pack(fill="both", expand=True)
 
-        ttk.Label(outer, text=APP_NAME, style="Title.TLabel").pack(anchor="w")
+        title = ttk.Frame(outer)
+        title.pack(fill="x")
+        ttk.Label(title, text=APP_NAME, style="Title.TLabel").pack(side="left")
+        ttk.Label(title, text="v" + APP_VERSION, foreground=COL_MUTED,
+                  font=("Segoe UI", 11)).pack(side="left", padx=(8, 0), pady=(5, 0))
         ttk.Label(outer, foreground=COL_MUTED,
                   text="1) Tell me where Valheim is.  2) Tick the mods you want.  3) Click Install / Update.").pack(anchor="w", pady=(0, 8))
 
@@ -1411,6 +1420,49 @@ class App(tk.Tk):
         gd = self.game_dir.get().strip()
         p = Path(gd) / "BepInEx" / "plugins"
         open_path(p if p.exists() else gd)
+
+    # ---------- self update ----------
+
+    def check_for_update(self):
+        """Asks GitHub for the latest installer release; if it's newer, offers to restart through
+        launcher.pyw, which downloads and applies the update before reopening this window."""
+        result = {}
+
+        def work():
+            rel = http_json("https://api.github.com/repos/{}/releases/latest".format(INSTALLER_REPO),
+                            accept="application/vnd.github+json")
+            result["tag"] = rel.get("tag_name", "")
+            result["url"] = rel.get("html_url") or "https://github.com/{}/releases/latest".format(INSTALLER_REPO)
+
+        def done(err):
+            if err:
+                messagebox.showerror(APP_NAME, "Couldn't check for a new version:\n{}".format(err))
+                return
+            tag = result["tag"]
+            if parse_version(tag) <= parse_version(APP_VERSION):
+                self.log("Installer is up to date (v{}).".format(APP_VERSION))
+                messagebox.showinfo(APP_NAME, "You have the latest version (v{}).".format(APP_VERSION))
+                return
+            self.log("New installer version available: {} (you have v{}).".format(tag, APP_VERSION))
+            launcher = HERE / "launcher.pyw"
+            if not launcher.exists():
+                if messagebox.askyesno(APP_NAME, "Version {} is available (you have v{}).\n\n"
+                                       "Open the download page?".format(tag, APP_VERSION)):
+                    webbrowser.open(result["url"])
+                return
+            if messagebox.askyesno(APP_NAME, "Version {} is available (you have v{}).\n\n"
+                                   "Update now? The installer will close, update itself and reopen."
+                                   .format(tag, APP_VERSION)):
+                kw = {"cwd": str(HERE)}
+                if not IS_WINDOWS:
+                    kw["start_new_session"] = True
+                subprocess.Popen([sys.executable, str(launcher)], **kw)
+                self.destroy()
+
+        if not self.run_bg(work, done):
+            messagebox.showinfo(APP_NAME, "Please wait for the current task to finish, then try again.")
+        else:
+            self.log("Checking for a new installer version...")
 
     def open_config(self):
         gd = self.game_dir.get().strip()
