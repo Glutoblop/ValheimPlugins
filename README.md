@@ -4,7 +4,7 @@ A point-and-click installer for Glutoblop's Valheim mods. No terminal, no manual
 
 ## For players
 
-1. Download this folder (or the zip you were sent) and unzip it anywhere.
+1. Download this repo (green **Code** button > **Download ZIP** on [github.com/Glutoblop/ValheimPlugins](https://github.com/Glutoblop/ValheimPlugins)) and unzip it anywhere.
 2. Double-click the launcher for your system:
 
    | System | Launcher |
@@ -17,6 +17,8 @@ A point-and-click installer for Glutoblop's Valheim mods. No terminal, no manual
 4. **Step 2:** BepInEx (the mod loader) is ticked automatically if it's missing or out of date.
 5. **Step 3:** tick the mods you want and click **Install / Update selected**.
 6. Start Valheim through Steam as normal.
+
+Type in the **Search** box (Ctrl+F) to filter the list. It fuzzy-matches the mod name and its GitHub URL, so `rcpsrch`, `serch` or `glutoblop health` all work.
 
 Open the installer again any time: mods with a newer version say **Update available**, and **Select updates** ticks them all for you. A note appears if a mod was last tested on a different Valheim version than yours.
 
@@ -37,9 +39,33 @@ The installer reminds you of this after installing.
 
 Valheim mods need nothing else: BepInEx runs on the game's own bundled .NET runtime.
 
+## Adding other plugins (File menu)
+
+The mod list comes from **`sources.json`** next to the installer: just a name you choose and a GitHub URL.
+
+```json
+[
+  { "name": "Recipe Search", "url": "https://github.com/Glutoblop/RecipeSearch" },
+  { "name": "Jotunn", "url": "https://github.com/Valheim-Modding/Jotunn" }
+]
+```
+
+- **File > Add plugin source...** (Ctrl+N): enter a name + URL (a GitHub URL on your clipboard is pre-filled). The **+ Add source** button does the same.
+- **File > Edit plugin sources...** (Ctrl+E): edit the JSON in-app. It is checked before saving (bad JSON shows the line/column; bad or duplicate URLs are rejected).
+- **File > Open sources.json in text editor**, then **File > Reload plugin sources** (F5).
+
+URLs can be `https://github.com/owner/repo`, `.../repo.git`, `.../tree/<branch>`, `git@github.com:owner/repo.git` or just `owner/repo`. An optional `"branch"` key is also accepted.
+
+How a source is installed:
+1. If the repo has a `plugin.json` (format below), it's used: version, files, last-tested Valheim version.
+2. Otherwise the repo's **latest GitHub release** is used: its tag is the version, and its `.zip` (or `.dll` assets) is installed. Source-code, debug and symbol files are skipped. Zips work in Thunderstore layout (`plugins/`, `config/`), with a `BepInEx/` folder, or flat. Existing config files are never overwritten, and every installed file is recorded so **Uninstall** removes exactly what was added.
+3. If neither exists, the row shows why it can't be installed.
+
+GitHub allows 60 unauthenticated API calls an hour, which is plenty for normal use. Only release-based sources use the API.
+
 ## How it works (for mod authors)
 
-- `catalog.json` lists the mod repos. Each repo has a `plugin.json` on `main`:
+- Glutoblop's mods each have a `plugin.json` on `main`:
 
   ```json
   {
@@ -62,6 +88,6 @@ Valheim mods need nothing else: BepInEx runs on the game's own bundled .NET runt
 - **Installing** downloads each file in `files` into `<Valheim>/<install_dir>/`.
 - **Game version** is read from `BepInEx/LogOutput.log` (after the game has been launched once with BepInEx) and the Steam build id from `steamapps/appmanifest_892970.acf`; both are compared against the mod's `valheim` block.
 - To **ship an update**: bump the version in `src/Plugin.cs` and `plugin.json`, build (the csproj copies the DLL to `dist/`), commit and push. Everyone sees it next time they open the installer.
-- To **add a new mod**: give its repo a `plugin.json` + `dist/` DLL and add it to `catalog.json`.
+- To **add a new mod**: give its repo a `plugin.json` + `dist/` DLL (or just publish GitHub releases) and add it to `sources.json`.
 
 Settings (your Valheim folder) are saved to `%APPDATA%\ValheimModInstaller\settings.json` (`~/.config/ValheimModInstaller` on Linux, `~/Library/Application Support/ValheimModInstaller` on macOS). If the GUI ever crashes, the error is written to `crash.log` in the same folder.

@@ -1,6 +1,20 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Runtime files the installer may create
+*.download
+crash.log
+settings.json
+
+# IDE / OS
 .vscode/
 .idea/
+*.swp
 Thumbs.db
+desktop.ini
 .DS_Store
