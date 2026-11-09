@@ -40,7 +40,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "Valheim Mod Installer"
-APP_VERSION = "1.3.3"
+APP_VERSION = "1.3.4"
 USER_AGENT = "ValheimModInstaller/" + APP_VERSION
 VALHEIM_APPID = "892970"
 INSTALLER_REPO = "Glutoblop/ValheimPlugins"   # where the installer itself is released
