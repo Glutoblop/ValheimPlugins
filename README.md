@@ -24,7 +24,7 @@ A point-and-click installer for Glutoblop's Valheim mods. No terminal, no manual
 
 Type in the **Search** box (Ctrl+F) to filter the list. It fuzzy-matches the mod name and its GitHub URL, so `rcpsrch`, `serch` or `glutoblop health` all work.
 
-The installer keeps itself up to date: each launch first checks the latest [ValheimPlugins release](https://github.com/Glutoblop/ValheimPlugins/releases/latest) and, if it's newer, unpacks it over the installer folder before opening. Your `sources.json` and settings are never overwritten. No internet? It just opens the installer you have.
+On Windows, the installer opens first and checks for updates in the background. If a new version is available, use the **Help** menu to apply it and restart. On Linux and macOS, the launcher checks for and applies updates before opening the installer. Updates preserve your `sources.json` and settings.
 
 Open the installer again any time: mods with a newer version say **Update available**, and **Select updates** ticks them all for you. A note appears if a mod was last tested on a different Valheim version than yours.
 

@@ -33,6 +33,9 @@ import webbrowser
 import zipfile
 from pathlib import Path
 
+if sys.version_info < (3, 8):
+    raise SystemExit("Python 3.8 or later is required.")
+
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -979,7 +982,7 @@ class App(tk.Tk):
         fm.add_separator()
         fm.add_command(label="Exit", command=self.destroy)
         bar.add_cascade(label="File", menu=fm)
-        hm = tk.Menu(bar, tearoff=0)
+        hm = self.help_menu = tk.Menu(bar, tearoff=0)
         hm.add_command(label="Check for new version...", command=self.check_for_update)
         hm.add_command(label="Open releases page",
                        command=lambda: webbrowser.open("https://github.com/{}/releases".format(INSTALLER_REPO)))
@@ -1530,9 +1533,7 @@ class App(tk.Tk):
 
     # ---------- self update ----------
 
-    def check_for_update(self):
-        """Asks GitHub for the latest installer release; if it's newer, offers to restart through
-        launcher.pyw, which downloads and applies the update before reopening this window."""
+    def check_for_update(self, automatic=False):
         result = {}
 
         def work():
@@ -1540,36 +1541,59 @@ class App(tk.Tk):
                             accept="application/vnd.github+json")
             result["tag"] = rel.get("tag_name", "")
             result["url"] = rel.get("html_url") or "https://github.com/{}/releases/latest".format(INSTALLER_REPO)
+            if automatic and not any(a.get("name") == "ValheimModInstaller.zip" for a in rel.get("assets", [])):
+                result["tag"] = ""
 
         def done(err):
             if err:
-                messagebox.showerror(APP_NAME, "Couldn't check for a new version:\n{}".format(err))
+                if not automatic:
+                    messagebox.showerror(APP_NAME, "Couldn't check for a new version:\n{}".format(err))
                 return
             tag = result["tag"]
             if parse_version(tag) <= parse_version(APP_VERSION):
-                self.log("Installer is up to date (v{}).".format(APP_VERSION))
-                messagebox.showinfo(APP_NAME, "You have the latest version (v{}).".format(APP_VERSION))
+                if not automatic:
+                    self.log("Installer is up to date (v{}).".format(APP_VERSION))
+                    messagebox.showinfo(APP_NAME, "You have the latest version (v{}).".format(APP_VERSION))
                 return
             self.log("New installer version available: {} (you have v{}).".format(tag, APP_VERSION))
-            launcher = HERE / "launcher.pyw"
-            if not launcher.exists():
-                if messagebox.askyesno(APP_NAME, "Version {} is available (you have v{}).\n\n"
-                                       "Open the download page?".format(tag, APP_VERSION)):
-                    webbrowser.open(result["url"])
-                return
-            if messagebox.askyesno(APP_NAME, "Version {} is available (you have v{}).\n\n"
-                                   "Update now? The installer will close, update itself and reopen."
-                                   .format(tag, APP_VERSION)):
-                kw = {"cwd": str(HERE)}
-                if not IS_WINDOWS:
-                    kw["start_new_session"] = True
-                subprocess.Popen([sys.executable, str(launcher)], **kw)
-                self.destroy()
+            if automatic:
+                self.help_menu.entryconfigure(0, label="Update installer to {}...".format(tag),
+                                              command=lambda: self.offer_update(tag, result["url"]))
+            else:
+                self.offer_update(tag, result["url"])
 
-        if not self.run_bg(work, done):
+        if automatic:
+            def check():
+                try:
+                    work()
+                except Exception:
+                    return  # Offline startup is normal.
+                self.ui(lambda: done(None))
+
+            threading.Thread(target=check, daemon=True).start()
+        elif not self.run_bg(work, done):
             messagebox.showinfo(APP_NAME, "Please wait for the current task to finish, then try again.")
         else:
             self.log("Checking for a new installer version...")
+
+    def offer_update(self, tag, url):
+        if self.busy:
+            messagebox.showinfo(APP_NAME, "Please wait for the current task to finish, then try again.")
+            return
+        launcher = HERE / "launcher.pyw"
+        if not launcher.exists():
+            if messagebox.askyesno(APP_NAME, "Version {} is available (you have v{}).\n\n"
+                                   "Open the download page?".format(tag, APP_VERSION)):
+                webbrowser.open(url)
+            return
+        if messagebox.askyesno(APP_NAME, "Version {} is available (you have v{}).\n\n"
+                               "Update now? The installer will close, update itself and reopen."
+                               .format(tag, APP_VERSION)):
+            kw = {"cwd": str(HERE)}
+            if not IS_WINDOWS:
+                kw["start_new_session"] = True
+            subprocess.Popen([sys.executable, str(launcher)], **kw)
+            self.destroy()
 
     def open_config(self):
         gd = self.game_dir.get().strip()
@@ -1590,6 +1614,8 @@ def main():
             pass
     try:
         app = App()
+        if "--check-for-updates" in sys.argv:
+            app.after_idle(lambda: app.check_for_update(automatic=True))
         app.mainloop()
     except Exception:
         # No console when run with pythonw: surface fatal errors in a dialog and a log file.
@@ -1605,8 +1631,8 @@ def main():
             r.withdraw()
             messagebox.showerror(APP_NAME, "The installer crashed:\n\n" + err[-1500:])
         except Exception:
-            pass
+            return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
