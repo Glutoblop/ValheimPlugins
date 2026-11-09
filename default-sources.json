@@ -46,5 +46,9 @@
   {
     "name": "Consumables Hotbar",
     "url": "https://github.com/Glutoblop/ConsumablesHotbar"
+  },
+  {
+    "name": "Farming Grid",
+    "url": "https://github.com/Glutoblop/FarmingGrid"
   }
 ]
